@@ -92,7 +92,7 @@ In addition to semantic HTTP status codes, error responses may include in the JS
 
 ## Orders [/orders]
 
-An Order is composed of an array of Rewards, a funding source, and an optional external ID.
+An Order is composed of an array of Rewards, a funding source, and an optional external ID. Interactions with orders will likely be the most critical component of your integration.
 
 **Order status**
 
@@ -105,10 +105,23 @@ ORDER STATUS | DESCRIPTION
 `FAILED`  | The order did not successfully go through.
 
 
+DELIVERY METHOD | REQUIREMENTS
+---- | ----
+`EMAIL` | Pass a valid email address via the `recipient.email` property
+`PHONE` | Pass a valid US phone number (10 digits required) via the `recipient.phone` property
+`LINK`  | Receive a link to the reward
+
+Note: Rewards generated in the Sandbox environment will be delivered to the API account email address to avoid accidental spam.
+
+### Create Order [POST]
+
+Creating orders is generally the most critical interaction point for the API.
+
+**Request body**
+
 **Single rewards processed synchronously**
 If a single reward is provided, the order will be processed synchronously, and the success response code will be `200`.
 Upon a `200` response, the reward will be distributed via the specified delivery method and funds will be deducted from your funding source.
-
 
 **Multiple rewards processed async**
 If multiple rewards are provided, the order will be processed asynchronously. The server will respond with a `202` code to indicate that the request has been accepted for processing, but the processing has not been completed. Orders will generally be processed within 30s of submission. Async orders will have status `CART`.
@@ -122,23 +135,12 @@ There are two ways to understand when an order goes from `CART` to `EXECUTED`:
 Requests issued with the same `external_id` are idempotent. If multiple orders are submitted with the same `external_id`, the server will respond with code `201`, and a body of the previous order created with the same external_id.
 
 
-DELIVERY METHOD | REQUIREMENTS
----- | ----
-`EMAIL` | You must pass a valid email address via the `recipient.email` property
-`PHONE` | You must pass a valid US phone number (10 digits required) via the `recipient.phone` property
-`LINK`  | Receive a link to the reward
-
-
-Note: Rewards generated in the Sandbox environment will be delivered to the API account email address to avoid accidental spam.
-
-### Create Order [POST]
-
-+ Request (application/json)
++ Request with body (application/json)
   + Attributes (object)
     + external_id (string) - Unique ID sent by client (optional)
     + payment (object)
       + funding_source_id (string, required) - [See FundingSources](#reference/0/fundingsources/create-order)
-    + rewards (array)
+    + rewards (array) - the key `reward` (singular) is also permitted here for backwards compatibility
       + object
         + value (object)
           + denomination (number, required)
