@@ -230,9 +230,9 @@ Requests issued with the same `external_id` are idempotent. If multiple orders a
           "external_id": "[ID FROM CLIENT]",
           "status": "EXECUTED",
           "payment": {
-            "subtotal": order.amount_dollars,
-            "total": order.price_dollars,
-            "fees": order.fee_dollars
+            "subtotal": 25.0,
+            "total": 25.5,
+            "fees": 0.5
           },
           "rewards": [{
             id: "DDABSUKSFSTY"
@@ -261,9 +261,9 @@ Requests issued with the same `external_id` are idempotent. If multiple orders a
           "external_id": "[ID FROM CLIENT]",
           "status": "EXECUTED",
           "payment": {
-            "subtotal": order.amount_dollars,
-            "total": order.price_dollars,
-            "fees": order.fee_dollars
+            "subtotal": 25.0,
+            "total": 25.5,
+            "fees": 0.5
           },
           "rewards": [{
             id: "DDABSUKSFSTY"
@@ -323,20 +323,24 @@ Note that `CART` / `FAILED` orders will not show up in this endpoint. This would
               + total (number)
     + Body
         {
-          "orders": [{
-            "id": "QABSTARTSFSIO",
-            "external_id": "[ID FROM CLIENT]",
-            "status": "EXECUTED",
-            "payment": {
-              "subtotal": order.amount_dollars,
-              "total": order.price_dollars,
-              "fees": order.fee_dollars
-            },
-            "rewards": [{
-              id: "DDABSUKSFSTY"
-            }]
-          }]
-      }
+          "orders": [
+            {
+              "id": "QABSTARTSFSIO",
+              "external_id": "[ID FROM CLIENT]",
+              "status": "EXECUTED",
+              "payment": {
+                "subtotal": 25.0,
+                "total": 25.5,
+                "fees": 0.5
+                },
+              "rewards": [
+                {
+                  id: "DDABSUKSFSTY"
+                }
+              ]
+            }
+          ]
+        }
 
 ### Show Order [GET /orders/{:id}]
 
@@ -362,9 +366,9 @@ Note that `CART` / `FAILED` orders will not show up in this endpoint. This would
             "external_id": "[ID FROM CLIENT]",
             "status": "CART",
             "payment": {
-              "subtotal": order.amount_dollars,
-              "total": order.price_dollars,
-              "fees": order.fee_dollars
+              "subtotal": 25.0,
+              "total": 25.5,
+              "fees": 0.5
             },
             "rewards": [{
               id: "DDABSUKSFSTY"
