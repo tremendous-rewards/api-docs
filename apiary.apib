@@ -94,29 +94,32 @@ In addition to semantic HTTP status codes, error responses may include in the JS
 
 An Order is composed of an array of Rewards, a funding source, and an optional external ID.
 
-**Single rewards processed synchronously**
-If a single reward is provided, the order will be processed synchronously, and the success response code will be `200`.
-Upon a `200` response, the reward will be distributed via the specified delivery method and funds will be deducted from your funding source. See below for delivery method details.
+**Order status**
 
-
-**Multiple rewards processed async**
-If multiple rewards are provided, the order will be processed asynchronously. The server will respond with a `202` code to indicate that the request has been accepted for processing, but the processing has not been completed. Orders will generally be processed within 30s of submission.
-
-**Listening for processed orders**
-There are two ways to listen:
-1. Poll the [show order endpoint](#reference/0/orders/show-order). This is easiest, but subject to [rate limits](#introduction/rate-limiting).
-2. Listen for order-related webhooks.
-
-**Idempotence**
-Requests issued with the same `external_id` are idempotent. If multiple orders are submitted with the same `external_id`, the server will respond with code `201`.
-Note: the success-y nature of the `201` code is to both indicate to API clients that the original order was successfully placed, and to prevent retries on 4xx submissions.
-
+We display three different order statuses in the API:
 
 ORDER STATUS | DESCRIPTION
 ---- | ----
 `CART` | The order has been created, but hasn't yet been processed.
 `EXECUTED` | The order has been executed. Payment has been handled and rewards are being delivered (if applicable).
 `FAILED`  | The order did not successfully go through.
+
+
+**Single rewards processed synchronously**
+If a single reward is provided, the order will be processed synchronously, and the success response code will be `200`.
+Upon a `200` response, the reward will be distributed via the specified delivery method and funds will be deducted from your funding source.
+
+
+**Multiple rewards processed async**
+If multiple rewards are provided, the order will be processed asynchronously. The server will respond with a `202` code to indicate that the request has been accepted for processing, but the processing has not been completed. Orders will generally be processed within 30s of submission. Async orders will have status `CART`.
+
+**Listening for updates to orders**
+There are two ways to understand when an order goes from `CART` to `EXECUTED`:
+1. Poll the [show order endpoint](#reference/0/orders/show-order). When the order object's `status` is `EXECUTED`, the order will have been successfully processeed. This method is easiest, but is also subject to [rate limits](#introduction/rate-limiting).
+2. Listen for order-related webhooks.
+
+**Idempotence**
+Requests issued with the same `external_id` are idempotent. If multiple orders are submitted with the same `external_id`, the server will respond with code `201`, and a body of the previous order created with the same external_id.
 
 
 DELIVERY METHOD | REQUIREMENTS
@@ -191,6 +194,7 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
         + order (object)
           + id (string)
           + external_id (string)
+          + status (string)
 
     + Body
       {
@@ -206,6 +210,7 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
         + order (object)
           + id (string)
           + external_id (string)
+          + status (string)
           + rewards (array)
             + (object)
               + id (string)
@@ -236,6 +241,7 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
         + order (object)
           + id (string)
           + external_id (string)
+          + status (string)
           + rewards (array)
             + (object)
               + id (string)
@@ -266,7 +272,6 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
         + errors (object)
           + message (string)
 
-
     + Body
       {
         "errors": {
@@ -278,7 +283,6 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
     + Attributes (object)
         + errors (object)
           + message (string)
-
 
     + Body
       {
@@ -368,7 +372,6 @@ Note that `CART` / `FAILED` orders will not show up in this endpoint. This would
 ## Rewards [/rewards]
 
 Each Reward consists of a recipient, a delivery method, a denomination, products from our catalog among which the recipient can select (Amazon, prepaid Visa cards, etc.), and optionally a presentation layer.
-
 
 ### List Rewards [GET]
 
