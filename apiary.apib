@@ -105,19 +105,21 @@ ORDER STATUS | DESCRIPTION
 `FAILED`  | The order did not successfully go through.
 
 
+**Delivery methods**
+
+All delivery methods are configurable via API by setting the `delivery` attribute on a reward object.
+
 DELIVERY METHOD | REQUIREMENTS
 ---- | ----
 `EMAIL` | Pass a valid email address via the `recipient.email` property
 `PHONE` | Pass a valid US phone number (10 digits required) via the `recipient.phone` property
-`LINK`  | Receive a link to the reward
+`LINK`  | Pass in Receive a link to the reward
 
 Note: Rewards generated in the Sandbox environment will be delivered to the API account email address to avoid accidental spam.
 
 ### Create Order [POST]
 
 Creating orders is generally the most critical interaction point for the API.
-
-**Request body**
 
 **Single rewards processed synchronously**
 If a single reward is provided, the order will be processed synchronously, and the success response code will be `200`.
