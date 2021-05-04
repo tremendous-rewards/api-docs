@@ -1,0 +1,981 @@
+FORMAT: 1A
+HOST: https://www.tremendous.com/api/v2
+
+# Tremendous API - V2
+
+Deliver rewards and incentives to employees, customers, survey participants, and more through the Tremendous API. We aim to offer the easiest API to integrate flexible rewards into your application.
+
+
+## Gaining Access
+
+You can get started immediately with your integration using our sandbox access token.  Sign up through the [Sandbox Tremendous dashboard](https://testflight.tremendous.com/login) to access sandbox API keys.
+
+## Sandbox Environment
+
+Tremendous sandbox requests are currently accessed through https://testflight.tremendous.com and require the sandbox access token for authorization.
+
+To avoid accidental spam, all sandbox rewards are emailed to your API user's email address which follows a standard pattern: `tremendous-api@[your email extension]`.
+The API user's email address for your account can be found within the members section of the dashboard.
+
+## Production access
+
+Once you're ready for production access, fill out the form [here](https://www.tremendous.com/api-access-request). We typically process these requests within one business day. 
+
+## REST design
+
+The Tremedous API uses standard HTTP verbs to communicate and HTTP response codes to indicate status and errors. The Tremendous API is served over HTTPS only to ensure data privacy. `JSON` is the only supported content type for inputs or outputs.
+
+## Authentication
+
+Every request must include your `access_token` in the Authorization header.
+Within the Sandbox environment only, GET requests can include the access token as a parameter within the browser for manual testing purposes.
+
+```sh
+$ curl --request GET \
+    --url https://testflight.tremendous.com/api/v2/funding_sources \
+    --header 'Authorization: Bearer {your_access_token}'
+```
+
+## Versioning
+
+All requests specify the intended API version in the endpoint URL (i.e. https://www.tremendous.com/api/v2/).
+
+Breaking changes require the publication of a new API version. Non-breaking changes to an existing version do not and may include (but are not limited to):
+
+- Adding new resources
+- Adding new optional request parameters to existing resources.
+- Adding new attributes to existing responses.
+
+## DateTimes
+
+All datetime strings are in UTC timezone.
+
+## HTTP Responses
+
+CODE | Explanation
+---- | ----
+`200 - OK` | Everything worked as expected
+`201 - OK` | Resource already exists
+`400 - Bad Request` | Often due to malformed or missing parameters.
+`401 - Unauthorized` | Denied access to resource
+`402 - Payment Failure` | Order failed to execute due to NSF.
+`404 - Not Found` | Resource does not exist.
+`429 - Rate Limited` | Your client has sent too many requests.
+`500, 502, 503, 504 - Internal Errors` | An error has occurred on Tremendous's end.
+
+## Rate Limiting
+
+The current rate limit is 30 requests per 30 seconds. Any additional requests beyond this limit in the timeframe will result in a 429 response status.
+
+## Errors
+
+In addition to semantic HTTP status codes, error responses may include in the JSON response body an errors object, composed of (optional) `message` and `params` properties.  The params property encapsulates user input errors.
+
+```
+  {
+    "errors": {
+      "message": "Top level error message",
+      "payload": {}
+    }
+  }
+```
+
+## Client Libraries
+
+[Python SDK](https://github.com/GiftRocket/tremendous-python)
+
+[Node.js SDK](https://github.com/GiftRocket/tremendous-node)
+
+[Ruby SDK](https://github.com/GiftRocket/tremendous-ruby)
+
+
+## Orders [/orders]
+
+An Order is composed of an array of Rewards, a funding source, and an optional external ID.  Requests issued with the same `external_id` are idempotent and they will only ever create a single order.
+
+While Orders do support multiple Rewards via the dashboard, to avoid duplicates and generally simplify the API, the Orders CREATE endpoint  only accepts a single Reward per Order.
+
+Upon completion of a successful CREATE request (followed by a 200 response), the reward will be distributed via the specified delivery method and funds will be deducted from your funding source.  See below for delivery method details.
+
+DELIVERY METHOD | REQUIREMENTS
+---- | ----
+`EMAIL` | You must pass a valid email address via the `recipient.email` property
+`PHONE` | You must pass a valid US phone number (10 digits required) via the `recipient.phone` property
+`LINK`  | Receive a link to the reward
+
+Note: Rewards generated in the Sandbox environment will be delivered to the API account email address to avoid accidental spam.
+
+### Create Order [POST]
+
++ Request (application/json)
+  + Attributes (object)
+    + external_id (string) - Unique ID sent by client (optional)
+    + payment (object)
+      + funding_source_id (string, required) - [See FundingSources](#reference/0/fundingsources/create-order)
+    + reward (object, required)
+      + value (object)
+        + denomination (number, required)
+        + currency_code (string) - default USD
+      + products (array) - [See Products](#reference/0/products/create-order)
+      + campaign_id (string) - [See Campaigns](#reference/0/campaigns/create-order)
+      + recipient (object, required)
+        + name (string, required)
+        + email (string)
+        + phone (string)
+        + address (object)
+          + full_name (string)
+          + address_1 (string)
+          + address_2 (string)
+          + city (string)
+          + state (string)
+          + zip (string)
+      + delivery (object, required)
+        + method (string, required)
+          Choices: [EMAIL, PHONE, LINK, MAIL]
+        + meta (object)
+          + subject_line (string)
+          + from_name (string)
+
+    + Body
+        {
+          "external_id": "OPTIONAL ID FROM CLIENT SYSTEM",
+          "payment": {
+            "funding_source_id": "LARFAF2423"
+          },
+          "reward": {
+            "value": {
+              "denomination": 30,
+              "currency_code": "USD"
+            },
+            "campaign_id": "ABCD23424",
+            "products": ["Optional array of product IDs that overrides Campaign"],
+            "recipient": {
+              "name": "Denise Miller",
+              "email": "denise@sales.com"
+            },
+            "delivery": {
+              "method": "EMAIL",
+              "meta": {}
+            }
+          }
+        }
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + order (object)
+          + id (string)
+          + external_id (string)
+          + rewards (array)
+            + (object)
+              + id (string)
+          + payment (object)
+              + subtotal (number)
+              + fees (number)
+              + total (number)
+
+    + Body
+      {
+          "order": {
+            "id": "QABSTARTSFSIO",
+            "external_id": "[ID FROM CLIENT]",
+            "payment": {
+              "subtotal": order.amount_dollars,
+              "total": order.price_dollars,
+              "fees": order.fee_dollars
+            },
+            "rewards": [{
+              id: "DDABSUKSFSTY"
+            }]
+          }
+      }
+
+### List Orders [GET]
+
++ Request
+    + Parameters
+        + offset:(number) - Start index into the result set. The result set ordered by date created (`DESC `)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + orders (array)
+          + (object)
+            + id (string)
+            + external_id (string)
+            + rewards (array)
+              + (object)
+                + id (string)
+            + payment (object)
+              + subtotal (number)
+              + fees (number)
+              + total (number)
+    + Body
+        {
+          "orders": [{
+            "id": "QABSTARTSFSIO",
+            "external_id": "[ID FROM CLIENT]",
+            "payment": {
+              "subtotal": order.amount_dollars,
+              "total": order.price_dollars,
+              "fees": order.fee_dollars
+            },
+            "rewards": [{
+              id: "DDABSUKSFSTY"
+            }]
+          }]
+      }
+
+### Show Order [GET /orders/{:id}]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + order (object)
+          + id (string)
+          + external_id (string)
+          + rewards (array)
+            + (object)
+              + id (string)
+          + payment (object)
+              + subtotal (number)
+              + fees (number)
+              + total (number)
+
+    + Body
+        {
+          "order": {
+            "id": "QABSTARTSFSIO",
+            "external_id": "[ID FROM CLIENT]",
+            "payment": {
+              "subtotal": order.amount_dollars,
+              "total": order.price_dollars,
+              "fees": order.fee_dollars
+            },
+            "rewards": [{
+              id: "DDABSUKSFSTY"
+            }]
+          }
+      }
+
+
+## Rewards [/rewards]
+
+Each Reward consists of a recipient, a delivery method, a denomination, products from our catalog among which the recipient can select (Amazon, prepaid Visa cards, etc.), and optionally a presentation layer.
+
+
+### List Rewards [GET]
+
++ Parameters
+    + offset:(number) - Start index into the result set. The result set ordered by date created (`DESC `)
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + rewards (array)
+          + (object)
+            + id
+            + order_id (string)
+            + value (object)
+              + denomination (string)
+              + currency_code (string)
+            + products (array)
+            + events (array)
+              + (object)
+                + type (string)
+                + date_utc (string)
+            + recipient (object)
+                + name (string)
+                + email (string)
+                + phone (string)
+                + address (object)
+                  + full_name (string)
+                  + address_1 (string)
+                  + address_2 (string)
+                  + city (string)
+                  + state (string)
+                  + zip (string)
+            + delivery (object)
+                + method (string)
+                  Choices: [EMAIL, PHONE, LINK, MAIL]
+                + status (string)
+                  Choices: [PENDING, SUCCEEDED, FAILED]
+
+    + Body
+
+        {
+          "rewards": [{
+            "value": {
+              "denomination: 30,
+              "currency_code": "USD"
+            },
+            "recipient": {
+              "name": "Denise Miller",
+              "email": "denise@sales.com",
+              "phone": null,
+              "address": null
+            },
+            products: ["HX4U3DQX6GSA"]
+            "delivery": {
+              "method": "EMAIL",
+              "status": "SUCCEEDED"
+            }
+          }]
+        }
+
+
+### Retrieve Reward [GET /rewards/{id}]
+
++ Parameters
+    + id:(string) 
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + reward (object)
+          + id (string)
+          + order_id (string)
+          + value (object)
+            + denomination (string)
+            + currency_code (string)
+          + products (array)
+          + events (array)
+            + (object)
+              + type (string)
+              + date_utc (string)
+          + recipient (object)
+              + name (string)
+              + email (string)
+              + phone (string)
+              + address (object)
+                + full_name (string)
+                + address_1 (string)
+                + address_2 (string)
+                + city (string)
+                + state (string)
+                + zip (string)
+          + delivery (object)
+              + method (string)
+              + status (string)
+
+    + Body
+        {
+          "reward": {
+            "value": {
+              "denomination: 30,
+              "currency_code": "USD"
+            },
+            "recipient": {
+              "name": "Denise Miller",
+              "email": "denise@sales.com",
+            },
+            products: ["HX4U3DQX6GSA"]
+            "delivery": {
+              "method": "EMAIL",
+              "status": "SUCCEEDED"
+            }
+          }
+        }
+
+
+### Approve Reward [POST /rewards/{id}/approve]
+
++ Parameters
+    + id:(string) 
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + reward (object)
+          + id (string)
+          + order_id (string)
+          + value (object)
+            + denomination (string)
+            + currency_code (string)
+          + products (array)
+          + events (array)
+            + (object)
+              + type (string)
+              + date_utc (string)
+          + recipient (object)
+              + name (string)
+              + email (string)
+              + phone (string)
+              + address (object)
+                + full_name (string)
+                + address_1 (string)
+                + address_2 (string)
+                + city (string)
+                + state (string)
+                + zip (string)
+          + delivery (object)
+              + method (string)
+              + status (string)
+
+    + Body
+        {
+          "reward": {
+            "value": {
+              "denomination: 30,
+              "currency_code": "USD"
+            },
+            "recipient": {
+              "name": "Denise Miller",
+              "email": "denise@sales.com",
+            },
+            products: ["HX4U3DQX6GSA"]
+            "delivery": {
+              "method": "EMAIL",
+              "status": "SUCCEEDED"
+            }
+          }
+        }
+
+
+## Campaigns [/campaigns]
+
+The Campaign model defines the presentation of the reward as well as the available products (the catalog of payout options).
+
+New campaigns can be created through the [dashboard](https://www.tremendous.com/rewards).
+
+### List Campaigns [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + campaigns (array)
+          + (object)
+            + id (string)
+            + name (string)
+            + description (string)
+            + products (array)
+
+    + Body
+
+        {
+          "campaigns": [
+            {
+              "id": "ABCD23424",
+              "name": "My campaign",
+              "description": null,
+              "products": ["HX4U3DQX6GSA"]
+            }
+          ]
+        }
+
+
+## Products [/products]
+
+The available catalog of payout options for your reward recipients (e.g merchant gift cards, prepaid Visa cards, etc.).
+
+The skus array defines the set of acceptable denominations for each catalog item.  Each sku defines a range of values between the min and the max value.  For example, adidas gift cards accept an denomination (USD) between 5 and 200.
+
+
+[View the entire catalog here](https://www.tremendous.com/catalog).
+
+### List Products [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+      + products (array)
+        + (object)
+          + id (string)
+          + category (string)
+          + countries (array)
+            + (object)
+              + abbr
+          + name (string)
+          + images (array)
+            + (object)
+              + src (string)
+          + skus (array)
+            + (object)
+              + min (number)
+              + max (number)
+
+
+    + Body
+
+        {
+          "products": [
+            {
+              "id": "HX4U3DQX6GSA",
+              "name":"adidas",
+              "category": "merchant_card",
+              "countries": [{
+                abbr: "US"
+              }],
+              "images": [{
+                src: "https://s3.giftrocket.com/images/adidas"
+              }],
+              "skus":[{
+                "min":5,
+                "max":250
+              }]
+            }
+          ]
+        }
+
+
+## FundingSources [/funding_sources]
+
+FundingSources provide the mechanism for funding your orders (Credit Card / ACH / Wire).
+
+Sources can be added through the
+web [dashboard](https://www.tremendous.com/rewards).
+
+### List FundingSources [GET]
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + funding_sources (array)
+          + (object)
+            + id (string)
+            + method (string)
+            + meta (object) - Meta data specific to the funding source method
+
+
+    + Body
+
+        {
+          "funding_sources": [
+            {
+              "id": "LARFAF2423",
+              "method": "ach",
+              "meta": {
+                "accountholder_name": "James Bay",
+                "account_number_mask": "6789",
+                "bank_name":"Chase"
+              }
+            }
+          ]
+        }
+
+### Show FundingSource [GET /funding_sources/{:id}]
+
++ Response 200 (application/json)
+    + Attributes (object)
+      + funding_source (object)
+        + id (string)
+        + method (string)
+        + meta (object) - Meta data specific to the funding source method
+
+    + Body
+
+        {
+          "funding_source": {
+            "id": "LARFAF2423",
+            "method": "ach",
+            "meta": {
+              "accountholder_name": "James Bay",
+              "account_number_mask": "6789",
+              "bank_name":"Chase"
+            }
+          }
+        }
+
+## Invoices [/invoices]
+
+Invoices can be generated either through the dashboard or programmatically to request wires for prefunding the account balance.
+
+### Create Invoice [POST]
+
++ Request (application/json)
+    + Attributes (object)
+      + po_number (string, required)
+      + amount (number, required)
+
+    + Body
+        {
+          "po_number": "[ID FROM CLIENT]",
+          "amount": 2000
+        }
+
+### List Invoices [GET]
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + invoices (array)
+          + (object)
+            + id (string)
+            + po_number (string)
+            + amount (number)
+            + status (string)
+              Choices: [DELETED, PENDING, PAID]
+
+    + Body
+
+        {
+          "invoices": [
+            {
+              "id": "BA-FAF2423",
+              "po_number": "[ID FROM CLIENT]",
+              "amount": 2000,
+              "status": "PAID"
+            }
+          ]
+        }
+
+### Show Invoice [GET /invoices/{:id}]
+
++ Response 200 (application/json)
+    + Attributes (object)
+      + invoice (object)
+        + id (string)
+        + po_number (string)
+        + amount (number)
+        + status (string)
+          Choices: [DELETED, PENDING, PAID]
+
+    + Body
+
+        {
+          "invoice": {
+            "id": "BA-FAF2423",
+            "po_number": "[ID FROM CLIENT]",
+            "amount": 2000,
+            "status": "PAID"
+          }
+        }
+
+### Destroy Invoice [DELETE /invoices/{:id}]
+
++ Response 200 (application/json)
+    + Body
+
+        {
+          "invoice": {
+            "id": "BA-FAF2423",
+            "po_number": "[ID FROM CLIENT]",
+            "amount": 2000,
+            "status": "DELETED"
+          }
+        }
+
+### Invoice PDF [GET /invoices/{:id}/pdf]
+
++ Response 200 (application/pdf)
+
+
+## Organizations [/organizations]
+
+A top level Organization is composed of zero to many sub-Organizations.  For each sub-organization, the top level organization can invite members, execute orders, and track order and reward histories.
+
+To perform an API request on behalf of a child Organization, a parent should first create the Organization and then generate and store an access token in a subsequent request.
+
+### Create Organization [POST]
+
++ Request (application/json)
+    + Attributes (object)
+      + name (string, required)
+      + website (string, required)
+
+    + Body
+      {
+        "parent_id": "ABC123DEFG",
+        "name": "Apple Inc, Sales Team",
+        "website": "https://www.apple.com",
+      }
+
+
++ Response 200 (application/json)
+    + Attributes (object)
+      + organization (object)
+        + id (string)
+        + name (string)
+        + website (string)
+
+    + Body
+        {
+          "organization": {
+            "id": "QABSTARTSFSIO",
+            "name": "Apple Inc, Sales Team",
+            "website": "https://www.apple.com",
+          }
+        }
+
+### List Organizations [GET]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+      + organizations (array)
+        + (object)
+          + id (string)
+          + name (string)
+          + website (string)
+
+    + Body
+        {
+          "organizations": [
+            {
+              "id": "ZQBSTARTSFSTW",
+              "name": "Apple Inc",
+              "website": "https://www.apple.com",
+              "access_token": "[ACCESS_TOKEN]"
+            },
+            {
+              "id": "QABSTARTSFSIO",
+              "name": "Apple Inc - Sales Team",
+              "website": "https://www.apple.com",
+              "access_token": "[ACCESS_TOKEN]"
+            }
+         ]
+      }
+
+### Show Organization [GET /organizations/{:id}]
+
++ Response 200 (application/json)
+    + Attributes (object)
+      + organization (object)
+        + id (string)
+        + name (string)
+        + website (string)
+
+    + Body
+
+        {
+          "organization": {
+            "id": "ZQBSTARTSFSTW",
+            "name": "Apple Inc",
+            "website": "https://www.apple.com",
+          }
+        }
+
+### Create Access Token  [POST /organizations/{:id}/access_token]
+
++ Response 200 (application/json)
+    + Attributes (object)
+      + access_token (string)
+
+    + Body
+
+        {
+          "access_token": "[ACCESS_TOKEN]",
+        }
+
+
+## Members [/members]
+
+Organizations and sub-organizations are composed of users who can take actions via the web dashboard.
+
+These actions include adding funding sources to the organization, creating Campaigns, and more.
+
+User operation permissions are defined by role as seen below:
+
+ROLE | Explanation
+---- | ----
+`ADMIN` | Update organization settings, invite other members to the organization, and view all member order and reward histories within their organization.
+`MEMBER` | Limited permissions. Can view their own reward and order histories only.
+
+### Create Member [POST]
+
++ Request (application/json)
+    + Attributes (object)
+        + name (string, required)
+        + email (string, required)
+        + role (string, required)
+
+    + Body
+        {
+          "name": "John Smith",
+          "email": "john@apple.com",
+          "role": "ADMIN"
+        }
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + member (object)
+          + id (string)
+          + name (string)
+          + role (string)
+          + status (string)
+          + invite_url (string)
+
+    + Body
+        {
+          "member": {
+            "id": "LLSTARTSFSIO",
+            "name": "John Smith",
+            "email": "john@apple.com",
+            "role": "ADMIN",
+            "status": "PENDING",
+            "invite_url": "https://www.tremendous.com/rewards/auth/invite/abc",
+          }
+        }
+
+
+### List Members [GET]
+
++ Request
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + members (array)
+          + (object)
+            + id (string)
+            + name (string)
+            + email (string)
+            + role (string)
+            + status (string)
+            + invite_url (string)
+    + Body
+        {
+          "members": [{
+            "id": "LLSTARTSFSIO",
+            "name": "John Smith",
+            "email": "john@apple.com",
+            "role": "ADMIN",
+            "status": "PENDING",
+            "invite_url": "www.tremendous.com/rewards/auth/invite/abc",
+          }]
+      }
+
+### Show Member [GET /members/{:id}]
+
++ Response 200 (application/json)
+    + Attributes (object)
+      + member (object)
+        + id (string)
+        + name (string)
+        + email (string)
+        + role (string)
+        + status (string)
+        + invite_url (string)
+
+    + Body
+
+        {
+          "member": {
+            "id": "LLSTARTSFSIO",
+            "name": "John Smith",
+            "email": "john@apple.com",
+            "role": "ADMIN",
+            "status": "PENDING",
+            "invite_url": "www.tremendous.com/rewards/auth/invite/abc",
+          }
+        }
+
+
+## Fields [/fields]
+
+For reporting and analytics purposes, custom fields can be associated with rewards generated through the API.
+Custom fields must be first added by members of your admin team through the Tremendous Dashboard.
+
+### List Fields [GET]
+
++ Request
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + fields (array)
+          + (object)
+            + id (string)
+            + label (string)
+            + data_type (string)
+            + required (boolean)
+            + scope (string)
+    + Body
+        {
+          "fields": [{
+            "id":"TH8M4ID0UE71",
+            "label":"project id",
+            "data_type":"Text",
+            "required":true,
+            "scope":"REWARD"
+          }]
+      }
+
+
+## Webhooks [/webhooks]
+
+Webhooks can be create to receive event notifications as web requests to your own application or an external app. Currently only a single webhook is supported per organization.  CREATE requests either generate a new webhook or update an existing.
+
+### Webhook structure
+Webhooks are always sent as an HTTP POST request to the specified webhook URL.
+
+The event that triggered the webhook is sent as the  body of the HTTP request in JSON format.
+This JSON consists of an `event [string]`, `uuid [string]` and `payload [object]` properties. The `event_type` property scopes the event to a particular resource in the Tremendous typology (i.e. rewards, orders, etc.).
+
+See [this gist](https://gist.github.com/kapilkale/2df814eaa5459ff341be4401bbff17bd) for examples of webhook payloads.
+
+### Webhook Response
+
+Your application should respond with an HTTP status code of the 200 to indicate successful receipt. In the case of non-200 responses, the webhook will be retried up to 20 times with an exponential backoff strategy.
+
+### Webhook Security
+
+The request header includes a signature header that can be used to secure your webhook integration.
+The private key is retrievable via the Webhook CREATE endpoint is used to validate that the request is originating from Tremendous.
+Below, you'll find a Ruby sample which validates the on request.
+
+```ruby
+
+ def valid_request?(private_key, request)
+  signature_header = request.headers['Tremendous-Webhook-Signature']
+  algorithm, received_signature = signature_header.split('=', 2)
+  if algorithm != 'sha256'
+    raise Exception, "Invalid algorithm"
+  end
+  expected_signature = OpenSSL::HMAC.hexdigest(
+    OpenSSL::Digest.new(algorithm), private_key, request.body.read
+  )
+  return received_signature == expected_signature
+ end
+
+```
+
+### Create Webhook [POST]
+
++ Request (application/json)
+    + Attributes (object)
+      + url (string, required)
+
+    + Body
+        {
+          "url": "https://yourapp.com/webhooks/tremendous",
+        }
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + member (object)
+          + id (string)
+          + url (string)
+          + private_key (string)
+
+    + Body
+        {
+          "webhook": {
+            "id": "QTVA2408b",
+            "url": "https://yourapp.com/webhooks/tremendous",
+            "private_key": "a0f8afl24barZ80"
+          }
+        }
+
+
+### Show Webhook Events [GET /webhooks/{:id}/events]
+
++ Request (application/json)
+
++ Response 200 (application/json)
+    + Attributes (object)
+        + events (array)
+
+    + Body
+        {
+          "events": ["EventType", "EventType2"]
+        }
+
+### Simulate Webhook [POST /webhooks/{:id}/simulate]
+
++ Request (application/json)
+    + Attributes (object)
+      + event (string, required)
+
+    + Body
+        {
+          "event": "INVOICES.PAID"
+        }
+
++ Response 200 (application/json)
