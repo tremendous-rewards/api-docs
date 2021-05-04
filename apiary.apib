@@ -91,17 +91,46 @@ In addition to semantic HTTP status codes, error responses may include in the JS
 
 ## Orders [/orders]
 
-An Order is composed of an array of Rewards, a funding source, and an optional external ID.  Requests issued with the same `external_id` are idempotent and they will only ever create a single order.
+An Order is composed of an array of Rewards, a funding source, and an optional external ID.
 
-While Orders do support multiple Rewards via the dashboard, to avoid duplicates and generally simplify the API, the Orders CREATE endpoint  only accepts a single Reward per Order.
+**Single rewards processed synchronously**
+If a single reward is provided, the order will be processed synchronously, and the success response code will be `200`.
+Upon a `200` response, the reward will be distributed via the specified delivery method and funds will be deducted from your funding source. See below for delivery method details.
 
-Upon completion of a successful CREATE request (followed by a 200 response), the reward will be distributed via the specified delivery method and funds will be deducted from your funding source.  See below for delivery method details.
+
+**Multiple rewards processed async**
+If multiple rewards are provided, the order will be processed asynchronously. The server will respond with a `202` code to indicate that the request has been accepted for processing, but the processing has not been completed. Orders will generally be processed within 30s of submission.
+
+**Listening for processed orders**
+There are two ways to listen:
+1. Poll the [show order endpoint](#reference/0/orders/show-order). This is easiest, but subject to [rate limits](#introduction/rate-limiting).
+2. Listen for order-related webhooks.
+
+**Idempotence**
+Requests issued with the same `external_id` are idempotent. If multiple orders are submitted with the same `external_id`, the server will respond with code `201`.
+Note: the success-y nature of the `201` code is to both indicate to API clients that the original order was successfully placed, and to prevent retries on 4xx submissions.
+
+
+ORDER STATUS | DESCRIPTION
+---- | ----
+`CART` | The order has been created, but hasn't yet been processed.
+`EXECUTED` | The order has been executed. Payment has been handled and rewards are being delivered (if applicable).
+`FAILED`  | The order did not successfully go through.
+
 
 DELIVERY METHOD | REQUIREMENTS
 ---- | ----
 `EMAIL` | You must pass a valid email address via the `recipient.email` property
 `PHONE` | You must pass a valid US phone number (10 digits required) via the `recipient.phone` property
 `LINK`  | Receive a link to the reward
+
+
+DELIVERY METHOD | REQUIREMENTS
+---- | ----
+`EMAIL` | You must pass a valid email address via the `recipient.email` property
+`PHONE` | You must pass a valid US phone number (10 digits required) via the `recipient.phone` property
+`LINK`  | Receive a link to the reward
+
 
 Note: Rewards generated in the Sandbox environment will be delivered to the API account email address to avoid accidental spam.
 
@@ -112,29 +141,30 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
     + external_id (string) - Unique ID sent by client (optional)
     + payment (object)
       + funding_source_id (string, required) - [See FundingSources](#reference/0/fundingsources/create-order)
-    + reward (object, required)
-      + value (object)
-        + denomination (number, required)
-        + currency_code (string) - default USD
-      + products (array) - [See Products](#reference/0/products/create-order)
-      + campaign_id (string) - [See Campaigns](#reference/0/campaigns/create-order)
-      + recipient (object, required)
-        + name (string, required)
-        + email (string)
-        + phone (string)
-        + address (object)
-          + full_name (string)
-          + address_1 (string)
-          + address_2 (string)
-          + city (string)
-          + state (string)
-          + zip (string)
-      + delivery (object, required)
-        + method (string, required)
-          Choices: [EMAIL, PHONE, LINK, MAIL]
-        + meta (object)
-          + subject_line (string)
-          + from_name (string)
+    + rewards (array)
+      + object
+        + value (object)
+          + denomination (number, required)
+          + currency_code (string) - default USD
+        + products (array) - [See Products](#reference/0/products/create-order)
+        + campaign_id (string) - [See Campaigns](#reference/0/campaigns/create-order)
+        + recipient (object, required)
+          + name (string, required)
+          + email (string)
+          + phone (string)
+          + address (object)
+            + full_name (string)
+            + address_1 (string)
+            + address_2 (string)
+            + city (string)
+            + state (string)
+            + zip (string)
+        + delivery (object, required)
+          + method (string, required)
+            Choices: [EMAIL, PHONE, LINK, MAIL]
+          + meta (object)
+            + subject_line (string)
+            + from_name (string)
 
     + Body
         {
@@ -142,23 +172,40 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
           "payment": {
             "funding_source_id": "LARFAF2423"
           },
-          "reward": {
-            "value": {
-              "denomination": 30,
-              "currency_code": "USD"
-            },
-            "campaign_id": "ABCD23424",
-            "products": ["Optional array of product IDs that overrides Campaign"],
-            "recipient": {
-              "name": "Denise Miller",
-              "email": "denise@sales.com"
-            },
-            "delivery": {
-              "method": "EMAIL",
-              "meta": {}
+          "rewards": [
+            {
+              "value": {
+                "denomination": 30,
+                "currency_code": "USD"
+              },
+              "campaign_id": "ABCD23424",
+              "products": ["Optional array of product IDs that overrides Campaign"],
+              "recipient": {
+                "name": "Denise Miller",
+                "email": "denise@sales.com"
+              },
+              "delivery": {
+                "method": "EMAIL",
+                "meta": {}
+              }
             }
-          }
+          ]
         }
+
++ Response 202 (application/json)
+    + Attributes (object)
+        + order (object)
+          + id (string)
+          + external_id (string)
+
+    + Body
+      {
+        "order": {
+          "id": "QABSTARTSFSIO",
+          "external_id": "[ID FROM CLIENT]",
+          "status": "CART"
+        }
+      }
 
 + Response 200 (application/json)
     + Attributes (object)
@@ -175,21 +222,83 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
 
     + Body
       {
-          "order": {
-            "id": "QABSTARTSFSIO",
-            "external_id": "[ID FROM CLIENT]",
-            "payment": {
-              "subtotal": order.amount_dollars,
-              "total": order.price_dollars,
-              "fees": order.fee_dollars
-            },
-            "rewards": [{
-              id: "DDABSUKSFSTY"
-            }]
-          }
+        "order": {
+          "id": "QABSTARTSFSIO",
+          "external_id": "[ID FROM CLIENT]",
+          "status": "EXECUTED",
+          "payment": {
+            "subtotal": order.amount_dollars,
+            "total": order.price_dollars,
+            "fees": order.fee_dollars
+          },
+          "rewards": [{
+            id: "DDABSUKSFSTY"
+          }]
+        }
       }
 
++ Response 201 (application/json)
+    + Attributes (object)
+        + order (object)
+          + id (string)
+          + external_id (string)
+          + rewards (array)
+            + (object)
+              + id (string)
+          + payment (object)
+              + subtotal (number)
+              + fees (number)
+              + total (number)
+
+    + Body
+      {
+        "order": {
+          "id": "QABSTARTSFSIO",
+          "external_id": "[ID FROM CLIENT]",
+          "status": "EXECUTED",
+          "payment": {
+            "subtotal": order.amount_dollars,
+            "total": order.price_dollars,
+            "fees": order.fee_dollars
+          },
+          "rewards": [{
+            id: "DDABSUKSFSTY"
+          }]
+        }
+      }
+
++ Response 402 (application/json)
+    + Attributes (object)
+        + errors (object)
+          + message (string)
+
+
+    + Body
+      {
+        "errors": {
+          "message": "Order failed: payment error"
+        }
+      }
+
++ Response 400 (application/json)
+    + Attributes (object)
+        + errors (object)
+          + message (string)
+
+
+    + Body
+      {
+        "errors": {
+          "message": 'Order failed: validation failure'
+        }
+      }
+
+
 ### List Orders [GET]
+
+This endpoint allows you to query for executed orders.
+
+Note that `CART` / `FAILED` orders will not show up in this endpoint. This would be a breaking change for existing clients, but will be updated in future API versions.
 
 + Request
     + Parameters
@@ -214,6 +323,7 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
           "orders": [{
             "id": "QABSTARTSFSIO",
             "external_id": "[ID FROM CLIENT]",
+            "status": "EXECUTED",
             "payment": {
               "subtotal": order.amount_dollars,
               "total": order.price_dollars,
@@ -233,6 +343,7 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
         + order (object)
           + id (string)
           + external_id (string)
+          + status (string)
           + rewards (array)
             + (object)
               + id (string)
@@ -246,6 +357,7 @@ Note: Rewards generated in the Sandbox environment will be delivered to the API 
           "order": {
             "id": "QABSTARTSFSIO",
             "external_id": "[ID FROM CLIENT]",
+            "status": "CART",
             "payment": {
               "subtotal": order.amount_dollars,
               "total": order.price_dollars,
