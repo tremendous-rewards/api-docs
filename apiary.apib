@@ -636,9 +636,11 @@ The skus array defines the set of acceptable denominations for each catalog item
 
 ## FundingSources [/funding_sources]
 
-FundingSources provide the mechanism for funding your orders (Credit Card / ACH / Wire).
+FundingSources provide the mechanism for funding your orders. Most API users fund their orders using a balance that they maintain with Tremendous, but other forms of funding are available as well. Contact your account manager for more details.
 
-Sources can be added through the
+FundingSources endpoints can be used to query your account balance.
+
+FundingSources can be added through the
 web [dashboard](https://www.tremendous.com/rewards).
 
 ### List FundingSources [GET]
@@ -653,9 +655,16 @@ web [dashboard](https://www.tremendous.com/rewards).
 
 
     + Body
-
         {
           "funding_sources": [
+            {
+              "id":"GCTHLCMFVYMD",
+              "method":"balance",
+              "meta":{
+                "available_cents":500000,
+                "pending_cents":0
+              }
+            },
             {
               "id": "LARFAF2423",
               "method": "ach",
